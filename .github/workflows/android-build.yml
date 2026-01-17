@@ -1,0 +1,78 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Installs Android SDK command-line tools (keeps builds more reliable)
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x ./gradlew
+
+      - name: Gradle build (Debug)
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+
+      # Optional: run unit tests (Debug) — remove if you don't want it
+      - name: Unit tests (Debug)
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest
+
+      # Optional: build Release (unsigned or signed if secrets are present).
+      # If you want signing, add repo secrets:
+      #  ANDROID_KEYSTORE_BASE64  (base64 of your .jks/.keystore)
+      #  ANDROID_KEYSTORE_PASSWORD
+      #  ANDROID_KEY_ALIAS
+      #  ANDROID_KEY_PASSWORD
+      - name: Decode keystore (only if signing secrets exist)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/keystore.jks
+
+      - name: Gradle build (Release - signed if secrets exist)
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            ./gradlew --no-daemon --stacktrace assembleRelease \
+              -Pandroid.injected.signing.store.file=/tmp/keystore.jks \
+              -Pandroid.injected.signing.store.password="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+              -Pandroid.injected.signing.key.alias="${{ secrets.ANDROID_KEY_ALIAS }}" \
+              -Pandroid.injected.signing.key.password="${{ secrets.ANDROID_KEY_PASSWORD }}"
+          else
+            ./gradlew --no-daemon --stacktrace assembleRelease
+          fi
+
+      - name: Collect APKs
+        run: |
+          mkdir -p artifacts
+          # Collect any APKs from any module (app/ or others)
+          find . -type f -path "*build/outputs/apk*/*.apk" -print -exec cp -v {} artifacts/ \;
+          ls -lah artifacts
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apks-${{ github.sha }}
+          path: artifacts/*.apk
+          if-no-files-found: error
