@@ -263,7 +263,13 @@ public class Global {
         loadNotificationChannel(context);
         NotificationSettings.initializeNotificationManager(context);
         // Startup/refresh: avoid blocking the UI thread with filesystem work.
-        AppExecutors.io().execute(() -> Global.initStorage(context));
+        AppExecutors.io().execute(() -> {
+            try {
+                Global.initStorage(context);
+            } catch (Throwable t) {
+                LogUtility.e("Error initializing storage", t);
+            }
+        });
         shared.edit().remove("local_sort").apply();
         localSortType = new LocalSortType(shared.getInt(context.getString(R.string.key_local_sort), 0));
         useRtl = shared.getBoolean(context.getString(R.string.preference_key_use_rtl), false);
