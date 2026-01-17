@@ -210,11 +210,11 @@ public class ZoomFragment extends Fragment {
     public void loadImage(Priority priority) {
         if (photoView == null) return;
         int qualityLevel = requestedQualityLevel > 0 ? requestedQualityLevel : qualityLevelForScale(estimateInitialScale());
-        int[] target = computeDecodeSizePx(qualityScaleForLevel(qualityLevel));
+        int[] decodeSize = computeDecodeSizePx(qualityScaleForLevel(qualityLevel));
         if (completedDownload
             && lastRequestedDegree == degree
-            && lastRequestedW == target[0]
-            && lastRequestedH == target[1]) {
+            && lastRequestedW == decodeSize[0]
+            && lastRequestedH == decodeSize[1]) {
             return;
         }
         cancelRequest();
@@ -222,8 +222,8 @@ public class ZoomFragment extends Fragment {
         if (dra == null) return;
         completedDownload = false;
         lastRequestedDegree = degree;
-        lastRequestedW = target[0];
-        lastRequestedH = target[1];
+        lastRequestedW = decodeSize[0];
+        lastRequestedH = decodeSize[1];
         lastQualityLevel = qualityLevel;
         requestedQualityLevel = qualityLevel;
         dra
@@ -231,7 +231,7 @@ public class ZoomFragment extends Fragment {
             .apply(new RequestOptions()
                 .fitCenter()
                 .downsample(DownsampleStrategy.AT_MOST)
-                .override(target[0], target[1]))
+                .override(decodeSize[0], decodeSize[1]))
             .placeholder(R.drawable.ic_launcher_foreground)
             .error(R.drawable.ic_refresh)
             .priority(priority)
@@ -248,7 +248,7 @@ public class ZoomFragment extends Fragment {
                     return false;
                 }
             })
-            .into(target);
+            .into(this.target);
     }
 
     @Nullable
@@ -315,8 +315,8 @@ public class ZoomFragment extends Fragment {
         if (!isAdded() || photoView == null) return;
         // Avoid doing Glide work off the main thread.
         if (!Looper.getMainLooper().isCurrentThread()) return;
-        int[] target = computeDecodeSizePx(qualityScaleForLevel(desiredLevel));
-        if (target[0] == lastRequestedW && target[1] == lastRequestedH && lastRequestedDegree == degree) {
+        int[] decodeSize = computeDecodeSizePx(qualityScaleForLevel(desiredLevel));
+        if (decodeSize[0] == lastRequestedW && decodeSize[1] == lastRequestedH && lastRequestedDegree == degree) {
             lastQualityLevel = desiredLevel;
             return;
         }
