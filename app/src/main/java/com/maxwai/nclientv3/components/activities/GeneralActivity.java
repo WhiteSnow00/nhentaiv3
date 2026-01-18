@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
@@ -113,7 +114,7 @@ public abstract class GeneralActivity extends AppCompatActivity {
             Integer background = resolveThemeColor(android.R.attr.colorBackground);
             Integer surface = resolveThemeColor(com.google.android.material.R.attr.colorSurface);
             Integer onSurface = resolveThemeColor(com.google.android.material.R.attr.colorOnSurface);
-            Integer primary = resolveThemeColor(com.google.android.material.R.attr.colorPrimary);
+            Integer primary = resolveThemeColor(androidx.appcompat.R.attr.colorPrimary);
             Integer onPrimary = resolveThemeColor(com.google.android.material.R.attr.colorOnPrimary);
 
             int activityTheme = 0;
@@ -122,7 +123,7 @@ public abstract class GeneralActivity extends AppCompatActivity {
                 PackageManager pm = getPackageManager();
                 ActivityInfo ai = pm.getActivityInfo(getComponentName(), 0);
                 ApplicationInfo appInfo = pm.getApplicationInfo(getPackageName(), 0);
-                activityTheme = ai.themeResource;
+                activityTheme = ai.theme;
                 appTheme = appInfo.theme;
             } catch (Exception ignored) {
             }
