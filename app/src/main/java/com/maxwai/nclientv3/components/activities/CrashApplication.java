@@ -7,19 +7,15 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.view.View;
 
 import androidx.annotation.DeprecatedSinceApi;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 
 import com.maxwai.nclientv3.R;
-import com.maxwai.nclientv3.async.database.DatabaseHelper;
+import com.maxwai.nclientv3.utility.DebugTrace;
 import com.maxwai.nclientv3.async.downloader.DownloadGalleryV2;
 import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
@@ -48,6 +44,7 @@ public class CrashApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        DebugTrace.log("CrashApplication.onCreate", null, null, "pkg=" + getPackageName());
         LogUtility.i("BOOT_MARKER theme-compat-2026-01-18b", "pkg=", getPackageName(), "vc=", BuildConfig.VERSION_CODE, "vn=", BuildConfig.VERSION_NAME, "debug=", BuildConfig.DEBUG);
         AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
         Database.initAsync(this);
@@ -135,22 +132,7 @@ public class CrashApplication extends Application {
 
         @Override
         public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
-            View contentView = activity.findViewById(android.R.id.content);
-            if (contentView == null) return;
-            final int baseLeft = contentView.getPaddingLeft();
-            final int baseTop = contentView.getPaddingTop();
-            final int baseRight = contentView.getPaddingRight();
-            final int baseBottom = contentView.getPaddingBottom();
-            ViewCompat.setOnApplyWindowInsetsListener(contentView, (v, insets) -> {
-                Insets barsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-                v.setPadding(
-                    baseLeft + barsInsets.left,
-                    baseTop + barsInsets.top,
-                    baseRight + barsInsets.right,
-                    baseBottom + barsInsets.bottom
-                );
-                return insets;
-            });
+            // No-op: rely on default decor fitting and per-layout fitsSystemWindows to avoid double-applying insets.
         }
 
         @Override

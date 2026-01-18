@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.Handler;
 import android.widget.ImageView;
 
 import androidx.annotation.DrawableRes;
@@ -17,7 +16,6 @@ import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.resource.bitmap.Rotate;
 import com.bumptech.glide.request.RequestListener;
-import com.bumptech.glide.request.target.ImageViewTarget;
 import com.bumptech.glide.request.target.Target;
 import com.maxwai.nclientv3.api.components.Gallery;
 import com.maxwai.nclientv3.api.enums.ImageExt;
@@ -27,34 +25,10 @@ import com.maxwai.nclientv3.settings.Global;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
 public class ImageDownloadUtility {
-
-    private static final Map<Gallery, Deque<Runnable>> imageDownloadQueue =
-        Collections.synchronizedMap(new WeakHashMap<>());
-
-    private static void completeAndRunNext(@NonNull Gallery gallery) {
-        Runnable next = null;
-        synchronized (imageDownloadQueue) {
-            Deque<Runnable> q = imageDownloadQueue.get(gallery);
-            if (q == null) return;
-            q.pollFirst();
-            next = q.peekFirst();
-            if (next == null) {
-                imageDownloadQueue.remove(gallery);
-            }
-        }
-        if (next != null) next.run();
-    }
 
     public static void preloadImage(Context context, Uri url) {
         if (Global.getDownloadPolicy() == Global.DataUsageType.NONE) return;
@@ -90,91 +64,30 @@ public class ImageDownloadUtility {
             loadLogo(view);
             return;
         }
-        // Do not queue requests with a null Gallery key: keep Glide lifecycle behavior and avoid global serialization.
-        if (gallery == null) {
-            LogUtility.d("Requested url glide: " + url.get());
-            RequestManager glide = GlideX.with(context);
-            if (glide == null) return;
-            Drawable logo = Global.getLogo(context.getResources());
-            RequestBuilder<Drawable> dra = glide.load(url.get());
-            if (angle != 0) dra = dra.transform(new Rotate(angle));
-            dra.error(logo)
-                .addListener(new RequestListener<>() {
-                    @Override
-                    public boolean onLoadFailed(@Nullable GlideException e, @Nullable Object model, @NonNull Target<Drawable> target, boolean isFirstResource) {
-                        new Handler(context.getMainLooper()).post(errorRunnable);
-                        return false;
-                    }
+        Uri model = url.get();
+        LogUtility.d("Requested url glide: " + model);
+        RequestManager glide = GlideX.with(view);
+        if (glide == null) return;
+        Drawable logo = Global.getLogo(context.getResources());
+        RequestBuilder<Drawable> dra = glide.load(model);
+        if (angle != 0) dra = dra.transform(new Rotate(angle));
+        dra.error(logo)
+            .addListener(new RequestListener<>() {
+                @Override
+                public boolean onLoadFailed(@Nullable GlideException e, @Nullable Object model, @NonNull Target<Drawable> target, boolean isFirstResource) {
+                    view.post(errorRunnable);
+                    return false;
+                }
 
-                    @Override
-                    public boolean onResourceReady(@NonNull Drawable resource, @NonNull Object model, Target<Drawable> target, @NonNull DataSource dataSource, boolean isFirstResource) {
-                        return false;
-                    }
-                })
-                .placeholder(logo)
-                .into(new ImageViewTarget<Drawable>(view) {
-                    @Override
-                    protected void setResource(@Nullable Drawable resource) {
-                        new Handler(context.getMainLooper()).post(() -> this.view.setImageDrawable(resource));
-                    }
-                });
-            return;
-        }
-
-        Runnable task = () -> {
-            LogUtility.d("Requested url glide: " + url.get());
-            RequestManager glide = GlideX.with(context);
-            if (glide == null) return;
-            Drawable logo = Global.getLogo(context.getResources());
-            RequestBuilder<Drawable> dra = glide.load(url.get());
-            if (angle != 0)
-                dra = dra.transform(new Rotate(angle));
-            dra.error(logo)
-                .addListener(new RequestListener<>() {
-                    @Override
-                    public boolean onLoadFailed(@Nullable GlideException e, @Nullable Object model, @NonNull Target<Drawable> target, boolean isFirstResource) {
-                        new Handler(context.getMainLooper()).post(errorRunnable);
-                        completeAndRunNext(gallery);
-                        return false;
-                    }
-
-                    @Override
-                    public boolean onResourceReady(@NonNull Drawable resource, @NonNull Object model, Target<Drawable> target, @NonNull DataSource dataSource, boolean isFirstResource) {
-                        if (gallery != null && !gallery.getGalleryData().getCheckedExt())
-                            gallery.getGalleryData().setCheckedExt();
-                        completeAndRunNext(gallery);
-                        return false;
-                    }
-                })
-                .placeholder(logo)
-                .into(new ImageViewTarget<Drawable>(view) {
-                    @Override
-                    protected void setResource(@Nullable Drawable resource) {
-                        new Handler(context.getMainLooper()).post(() -> this.view.setImageDrawable(resource));
-                    }
-                });
-        };
-
-        boolean shouldStartNow;
-        synchronized (imageDownloadQueue) {
-            Deque<Runnable> q = imageDownloadQueue.get(gallery);
-            if (q == null) {
-                q = new ArrayDeque<>();
-                imageDownloadQueue.put(gallery, q);
-            }
-            if (priority && !q.isEmpty()) {
-                Runnable head = q.pollFirst();
-                List<Runnable> rest = new ArrayList<>(q);
-                q.clear();
-                q.addLast(head);
-                q.addLast(task);
-                q.addAll(rest);
-            } else {
-                q.addLast(task);
-            }
-            shouldStartNow = q.size() == 1;
-        }
-        if (shouldStartNow) task.run();
+                @Override
+                public boolean onResourceReady(@NonNull Drawable resource, @NonNull Object model, Target<Drawable> target, @NonNull DataSource dataSource, boolean isFirstResource) {
+                    if (gallery != null && !gallery.getGalleryData().getCheckedExt())
+                        gallery.getGalleryData().setCheckedExt();
+                    return false;
+                }
+            })
+            .placeholder(logo)
+            .into(view);
     }
 
     private static Uri getUrlForGallery(Gallery gallery, int page, boolean shouldFull) {

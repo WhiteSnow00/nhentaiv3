@@ -130,7 +130,7 @@ public class GalleryAdapter extends RecyclerView.Adapter<GalleryAdapter.ViewHold
     @Override
     public void onBindViewHolder(@NonNull final GalleryAdapter.ViewHolder holder, int position) {
 
-        switch (positionToType(holder.getBindingAdapterPosition())) {
+        switch (positionToType(position)) {
             case TAG:
                 loadTagLayout(holder);
                 break;
@@ -240,6 +240,7 @@ public class GalleryAdapter extends RecyclerView.Adapter<GalleryAdapter.ViewHold
 
     private void loadPageLayout(ViewHolder holder) {
         final int pos = holder.getBindingAdapterPosition();
+        if (pos == RecyclerView.NO_POSITION) return;
         final ImageView imgView = holder.master.findViewById(R.id.image);
 
         imgView.setOnClickListener(v -> startGallery(holder.getBindingAdapterPosition()));
