@@ -13,7 +13,9 @@ import com.maxwai.nclientv3.api.InspectorV3;
 import com.maxwai.nclientv3.api.components.Gallery;
 import com.maxwai.nclientv3.api.local.LocalGallery;
 import com.maxwai.nclientv3.async.database.Queries;
+import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
+import com.maxwai.nclientv3.utility.GalleryMetadataStore;
 import com.maxwai.nclientv3.utility.LogUtility;
 import com.maxwai.nclientv3.utility.Utility;
 
@@ -119,9 +121,25 @@ public class GalleryDownloaderV2 {
 
     private void onEnd() {
         setStatus(Status.FINISHED);
+        persistDownloadedMetadata();
         for (DownloadObserver observer : observers) observer.triggerEndDownload(this);
         LogUtility.d("Delete 75: " + id);
         Queries.DownloadTable.removeGallery(id);
+    }
+
+    private void persistDownloadedMetadata() {
+        if (gallery == null || folder == null) return;
+        try {
+            Database.ensureInitialized(context);
+            Queries.GalleryTable.insert(gallery);
+        } catch (Throwable t) {
+            LogUtility.e("Error saving downloaded metadata to DB", t);
+        }
+        try {
+            GalleryMetadataStore.writeSidecar(folder, gallery);
+        } catch (Throwable t) {
+            LogUtility.e("Error writing downloaded metadata sidecar", t);
+        }
     }
 
     private void onUpdate() {

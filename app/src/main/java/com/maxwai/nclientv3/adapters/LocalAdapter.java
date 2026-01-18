@@ -23,6 +23,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.maxwai.nclientv3.GalleryActivity;
 import com.maxwai.nclientv3.LocalActivity;
 import com.maxwai.nclientv3.R;
+import com.maxwai.nclientv3.api.InspectorV3;
+import com.maxwai.nclientv3.api.components.Gallery;
+import com.maxwai.nclientv3.api.enums.SpecialTagIds;
 import com.maxwai.nclientv3.api.enums.TagType;
 import com.maxwai.nclientv3.api.local.LocalGallery;
 import com.maxwai.nclientv3.api.local.LocalSortType;
@@ -34,8 +37,10 @@ import com.maxwai.nclientv3.async.downloader.DownloadQueue;
 import com.maxwai.nclientv3.async.downloader.GalleryDownloaderV2;
 import com.maxwai.nclientv3.components.classes.MultichoiceAdapter;
 import com.maxwai.nclientv3.components.status.StatusManager;
+import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.utility.AppExecutors;
+import com.maxwai.nclientv3.utility.GalleryMetadataStore;
 import com.maxwai.nclientv3.utility.ImageDownloadUtility;
 import com.maxwai.nclientv3.utility.LogUtility;
 import com.maxwai.nclientv3.utility.Utility;
@@ -48,6 +53,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class LocalAdapter extends MultichoiceAdapter<Object, LocalAdapter.ViewHolder> implements Filterable {
@@ -162,6 +169,7 @@ public class LocalAdapter extends MultichoiceAdapter<Object, LocalAdapter.ViewHo
         }
     };
     private int colCount;
+    private final Set<Integer> metadataRecoveryInFlight = ConcurrentHashMap.newKeySet();
 
     public LocalAdapter(LocalActivity cont, ArrayList<LocalGallery> myDataset) {
         this.context = cont;
@@ -329,6 +337,56 @@ public class LocalAdapter extends MultichoiceAdapter<Object, LocalAdapter.ViewHo
         int statusColor = statuses.get(ent.getId(), 0);
         if (statusColor == 0) statusColor = StatusManager.getByName(StatusManager.DEFAULT_STATUS).color;
         holder.title.setBackgroundColor(statusColor);
+        maybeRecoverMetadata(ent);
+    }
+
+    private void maybeRecoverMetadata(@NonNull LocalGallery ent) {
+        if (ent.hasGalleryData()) return;
+        int id = ent.getId();
+        if (id <= 0 || id == SpecialTagIds.INVALID_ID) return;
+        if (!metadataRecoveryInFlight.add(id)) return;
+
+        final File directory = ent.getDirectory();
+        AppExecutors.io().execute(() -> {
+            try {
+                boolean imported = GalleryMetadataStore.importFromLocalFiles(context, directory);
+                if (!imported && Global.getDownloadPolicy() != Global.DataUsageType.NONE) {
+                    InspectorV3 inspector = InspectorV3.galleryInspector(context, id, null);
+                    //noinspection CallToThreadRun
+                    inspector.run();
+                    if (inspector.getGalleries() != null && !inspector.getGalleries().isEmpty()) {
+                        Gallery g = (Gallery) inspector.getGalleries().get(0);
+                        try {
+                            Database.ensureInitialized(context);
+                            Queries.GalleryTable.insert(g);
+                        } catch (Throwable t) {
+                            LogUtility.e("Error saving recovered metadata to DB", t);
+                        }
+                        try {
+                            GalleryMetadataStore.writeSidecar(directory, g);
+                        } catch (Throwable t) {
+                            LogUtility.e("Error writing recovered metadata sidecar", t);
+                        }
+                    }
+                }
+            } finally {
+                metadataRecoveryInFlight.remove(id);
+            }
+
+            LocalGallery refreshed = new LocalGallery(directory, false);
+            if (!refreshed.hasGalleryData()) return;
+            context.runOnUiThread(() -> {
+                int datasetIndex = dataset.indexOf(refreshed);
+                if (datasetIndex >= 0) dataset.set(datasetIndex, refreshed);
+                int filterIndex = filter.indexOf(refreshed);
+                if (filterIndex >= 0) {
+                    filter.set(filterIndex, refreshed);
+                    notifyItemChanged(filterIndex);
+                } else {
+                    notifyDataSetChanged();
+                }
+            });
+        });
     }
 
     public void updateColor(int id) {
