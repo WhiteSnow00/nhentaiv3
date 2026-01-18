@@ -2,7 +2,9 @@ package com.maxwai.nclientv3.components.activities;
 
 import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.content.res.Configuration;
 import android.os.Bundle;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,8 +15,10 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.maxwai.nclientv3.R;
+import com.maxwai.nclientv3.BuildConfig;
 import com.maxwai.nclientv3.components.views.CFTokenView;
 import com.maxwai.nclientv3.settings.Global;
+import com.maxwai.nclientv3.utility.LogUtility;
 
 import java.lang.ref.WeakReference;
 
@@ -64,6 +68,7 @@ public abstract class GeneralActivity extends AppCompatActivity {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
         super.onResume();
         lastActivity = new WeakReference<>(this);
+        if (BuildConfig.DEBUG) logThemeDiagnostics();
         if (!isFastScrollerApplied) {
             isFastScrollerApplied = true;
             Global.applyFastScroller(findViewById(R.id.recycler));
@@ -78,5 +83,25 @@ public abstract class GeneralActivity extends AppCompatActivity {
             theme.applyStyle(R.style.AppTheme_Black, true);
         }
         return theme;
+    }
+
+    private void logThemeDiagnostics() {
+        try {
+            SharedPreferences preferences = getSharedPreferences("Settings", 0);
+            boolean blackTheme = preferences.getBoolean(getString(R.string.preference_key_black_theme), false);
+            int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+            Integer surface = resolveThemeColor(com.google.android.material.R.attr.colorSurface);
+            Integer onSurface = resolveThemeColor(com.google.android.material.R.attr.colorOnSurface);
+            LogUtility.d("ThemeDiagnostics night=", night, " blackTheme=", blackTheme, " colorSurface=", surface, " colorOnSurface=", onSurface);
+        } catch (Throwable t) {
+            LogUtility.w("ThemeDiagnostics failed", t);
+        }
+    }
+
+    @Nullable
+    private Integer resolveThemeColor(int attr) {
+        TypedValue out = new TypedValue();
+        if (!getTheme().resolveAttribute(attr, out, true)) return null;
+        return out.type >= TypedValue.TYPE_FIRST_COLOR_INT && out.type <= TypedValue.TYPE_LAST_COLOR_INT ? out.data : null;
     }
 }
