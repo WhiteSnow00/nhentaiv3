@@ -154,7 +154,7 @@ public class Utility {
     public static void sendImage(Context context, Drawable drawable, String text) {
         context = context.getApplicationContext();
         try {
-            File tempFile = File.createTempFile("toSend", ".jpg");
+            File tempFile = File.createTempFile("toSend", ".jpg", context.getCacheDir());
             tempFile.deleteOnExit();
             Bitmap image = drawableToBitmap(drawable);
             if (image == null) return;

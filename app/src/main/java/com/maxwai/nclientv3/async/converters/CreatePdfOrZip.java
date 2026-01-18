@@ -13,6 +13,8 @@ import android.net.Uri;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.FileProvider;
+import androidx.work.BackoffPolicy;
+import androidx.work.Constraints;
 import androidx.work.Data;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
@@ -31,6 +33,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -38,6 +41,7 @@ import java.util.zip.ZipOutputStream;
 public class CreatePdfOrZip extends Worker {
     private static final String GALLERY_DIR_KEY = "GALLERY_DIR";
     private static final String PDF_OR_ZIP_KEY = "PDF_OR_ZIP";
+    private static final int PDF_MAX_PIXELS = 4_000_000;
     private int notId;
     private int totalPage;
     private NotificationCompat.Builder notification;
@@ -47,14 +51,43 @@ public class CreatePdfOrZip extends Worker {
     }
 
     public static void startWork(Context context, LocalGallery gallery, boolean pdf) {
+        NotificationSettings.requestPostNotificationsIfNeeded(context);
         String directory = gallery.getDirectory().getAbsolutePath();
+        Constraints constraints = new Constraints.Builder()
+            .setRequiresStorageNotLow(true)
+            .setRequiresBatteryNotLow(true)
+            .build();
         WorkRequest createPdfOrZipWorkRequest = new OneTimeWorkRequest.Builder(CreatePdfOrZip.class)
             .setInputData(new Data.Builder()
                 .putString(GALLERY_DIR_KEY, directory)
                 .putBoolean(PDF_OR_ZIP_KEY, pdf)
                 .build())
+            .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build();
         WorkManager.getInstance(context).enqueue(createPdfOrZipWorkRequest);
+    }
+
+    private static int computeInSampleSize(int width, int height, int maxPixels) {
+        long pixels = (long) width * (long) height;
+        int sample = 1;
+        while (pixels / ((long) sample * (long) sample) > maxPixels) {
+            sample *= 2;
+        }
+        return Math.max(1, sample);
+    }
+
+    private static Bitmap decodeForPdf(File page) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(page.getAbsolutePath(), bounds);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = computeInSampleSize(bounds.outWidth, bounds.outHeight, PDF_MAX_PIXELS);
+        options.inPreferredConfig = Bitmap.Config.RGB_565;
+        options.inDither = true;
+        return BitmapFactory.decodeFile(page.getAbsolutePath(), options);
     }
 
     public static boolean hasPDFCapabilities() {
@@ -96,7 +129,7 @@ public class CreatePdfOrZip extends Worker {
                 for (int a = 1; a <= gallery.getPageCount(); a++) {
                     page = gallery.getPage(a);
                     if (page == null) continue;
-                    Bitmap bitmap = BitmapFactory.decodeFile(page.getAbsolutePath());
+                    Bitmap bitmap = decodeForPdf(page);
                     if (bitmap != null) {
                         PdfDocument.PageInfo info = new PdfDocument.PageInfo.Builder(bitmap.getWidth(), bitmap.getHeight(), a).create();
                         PdfDocument.Page p = document.startPage(info);
@@ -147,7 +180,7 @@ public class CreatePdfOrZip extends Worker {
                     out.setLevel(Deflater.BEST_COMPRESSION);
                     File actual;
                     int read;
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[16 * 1024];
                     for (int i = 1; i <= gallery.getPageCount(); i++) {
                         actual = gallery.getPage(i);
                         if (actual == null) continue;

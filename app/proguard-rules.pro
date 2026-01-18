@@ -14,7 +14,7 @@
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
@@ -33,7 +33,6 @@
 -assumenosideeffects class com.maxwai.nclientv3.utility.LogUtility {
     public static void d(...);
     public static void i(...);
-    public static void e(...);
 }
 
 # WorkManager uses reflection to instantiate workers from their (obfuscated) class names stored in WorkRequest.

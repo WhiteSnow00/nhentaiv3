@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import me.zhanghai.android.fastscroll.FastScrollerBuilder;
 import okhttp3.Cookie;
@@ -155,7 +156,7 @@ public class Global {
     @Nullable
     public static String getDefaultFileParent(Context context) {
         File f;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             f = context.getExternalFilesDir(null);
         } else {
             f = Environment.getExternalStorageDirectory();
@@ -167,9 +168,14 @@ public class Global {
         List<File> files = getUsableFolders(context);
         String path = context.getSharedPreferences("Settings", Context.MODE_PRIVATE).getString(context.getString(R.string.preference_key_save_path), Objects.requireNonNull(getDefaultFileParent(context)));
         File ROOTFOLDER = new File(path);
-        //in case the permission is removed
-        if (!files.contains(ROOTFOLDER) && !isExternalStorageManager())
-            ROOTFOLDER = new File(Objects.requireNonNull(getDefaultFileParent(context)));
+        // On Android 10+ (scoped storage), only allow app-scoped folders unless the user has All Files Access (R+).
+        // (On pre-Android 10, legacy external storage access is handled by WRITE_EXTERNAL_STORAGE.)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            boolean hasAllFilesAccess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager();
+            if (!files.contains(ROOTFOLDER) && !hasAllFilesAccess) {
+                ROOTFOLDER = new File(Objects.requireNonNull(getDefaultFileParent(context)));
+            }
+        }
         MAINFOLDER = new File(ROOTFOLDER, MAINFOLDER_NAME);
         LogUtility.d(MAINFOLDER);
         DOWNLOADFOLDER = new File(MAINFOLDER, DOWNLOADFOLDER_NAME);
@@ -373,6 +379,9 @@ public class Global {
     public static void reloadHttpClient(@NonNull Context context) {
         SharedPreferences preferences = context.getSharedPreferences("Login", 0);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
             .cookieJar(
                 new CustomCookieJar(
                     new SetCookieCache(),
@@ -579,7 +588,7 @@ public class Global {
 
     public static List<File> getUsableFolders(Context context) {
         List<File> strings = new ArrayList<>(3);
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q)
             strings.add(Environment.getExternalStorageDirectory());
 
         File[] files = context.getExternalFilesDirs(null);
@@ -588,11 +597,11 @@ public class Global {
     }
 
     public static boolean hasStoragePermission(Context context) {
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return true; //We don't check permission on Android 13
-        } else {
-            return ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // App-scoped external storage is available without runtime permissions.
+            return context.getExternalFilesDir(null) != null;
         }
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
 
     public static boolean isJPEGCorrupted(String path) {

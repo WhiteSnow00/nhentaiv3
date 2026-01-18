@@ -49,7 +49,9 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
             versionNameSuffix = "-release"
             resValue "string", "app_name", "NClientV3"
-            signingConfig = hasKeystore ? signingConfigs.release : signingConfigs.debug
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
             applicationIdSuffix = ".debug"
@@ -123,6 +125,8 @@ dependencies {
     implementation 'com.github.franmontiel:PersistentCookieJar:v1.0.1'
     // To parse HTML
     implementation 'org.jsoup:jsoup:1.22.1'
+    // Optional runtime dependency for Jsoup's RE2/J regex implementation (required for R8 full mode).
+    implementation 'com.google.re2j:re2j:1.8'
     // color picker
     implementation 'com.github.yukuku:ambilwarna:2.0.1'
     // fast scroll
