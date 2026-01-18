@@ -6,6 +6,9 @@ import android.util.JsonReader;
 
 import androidx.annotation.NonNull;
 import androidx.work.ExistingWorkPolicy;
+import androidx.work.BackoffPolicy;
+import androidx.work.Constraints;
+import androidx.work.NetworkType;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 import androidx.work.WorkRequest;
@@ -16,6 +19,7 @@ import com.maxwai.nclientv3.api.components.Tag;
 import com.maxwai.nclientv3.api.enums.TagStatus;
 import com.maxwai.nclientv3.api.enums.TagType;
 import com.maxwai.nclientv3.async.database.Queries;
+import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.utility.LogUtility;
 
@@ -42,13 +46,22 @@ public class ScrapeTags extends Worker {
     }
 
     public static void startWork(Context context) {
-        WorkRequest scrapeTagsWorkRequest = new OneTimeWorkRequest.Builder(ScrapeTags.class).build();
+        Constraints constraints = new Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .setRequiresStorageNotLow(true)
+            .build();
+        WorkRequest scrapeTagsWorkRequest = new OneTimeWorkRequest.Builder(ScrapeTags.class)
+            .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, java.time.Duration.ofMinutes(30))
+            .build();
         WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.KEEP, (OneTimeWorkRequest) scrapeTagsWorkRequest);
     }
 
     private int getNewVersionCode() throws IOException {
         try (Response x = Global.getClient(getApplicationContext()).newCall(new Request.Builder().url(VERSION).build()).execute()) {
             ResponseBody body = x.body();
+            if (body == null) return -1;
             try {
                 int k = Integer.parseInt(body.string().trim());
                 LogUtility.d("Found version: " + k);
@@ -63,6 +76,7 @@ public class ScrapeTags extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        Database.ensureInitialized(getApplicationContext());
         SharedPreferences preferences = getApplicationContext().getSharedPreferences("Settings", 0);
         Date nowTime = new Date();
         Date lastTime = new Date(preferences.getLong("lastSync", nowTime.getTime()));

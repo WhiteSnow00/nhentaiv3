@@ -9,15 +9,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.maxwai.nclientv3.api.components.GalleryData;
+import com.maxwai.nclientv3.api.components.Gallery;
 import com.maxwai.nclientv3.api.components.GenericGallery;
 import com.maxwai.nclientv3.api.enums.SpecialTagIds;
+import com.maxwai.nclientv3.async.database.Queries;
 import com.maxwai.nclientv3.components.classes.Size;
 import com.maxwai.nclientv3.files.GalleryFolder;
 import com.maxwai.nclientv3.files.PageFile;
 import com.maxwai.nclientv3.utility.LogUtility;
 
 import java.io.File;
-import java.io.FileReader;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -110,10 +111,13 @@ public class LocalGallery extends GenericGallery {
     @NonNull
     private GalleryData readGalleryData() {
         if (folder == null) return GalleryData.fakeData();
-        File nomedia = folder.getGalleryDataFile();
-        try (JsonReader reader = new JsonReader(new FileReader(nomedia))) {
-            return new GalleryData(reader);
-        } catch (Exception ignore) {
+        int id = folder.getId();
+        if (id != SpecialTagIds.INVALID_ID) {
+            try {
+                Gallery g = Queries.GalleryTable.galleryFromId(id);
+                if (g != null) return g.getGalleryData();
+            } catch (Throwable ignore) {
+            }
         }
         hasAdvancedData = false;
         return GalleryData.fakeData();

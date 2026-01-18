@@ -15,6 +15,7 @@ import androidx.core.content.FileProvider;
 import com.maxwai.nclientv3.BuildConfig;
 import com.maxwai.nclientv3.R;
 import com.maxwai.nclientv3.settings.Global;
+import com.maxwai.nclientv3.utility.FileShareUtil;
 import com.maxwai.nclientv3.utility.LogUtility;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -234,12 +235,13 @@ public class VersionChecker {
 
     private void installApp(File f) {
         try {
-            Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", f);
+            File shareable = FileShareUtil.ensureShareableCopy(context, f);
+            Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", shareable);
             @SuppressLint("RequestInstallPackagesPolicy") Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
             intent.setData(apkUri);
             intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             context.startActivity(intent);
-        } catch (IllegalArgumentException ignore) {
+        } catch (Exception ignore) {
             context.runOnUiThread(() -> Toast.makeText(context, context.getString(R.string.downloaded_update_at, f.getAbsolutePath()), Toast.LENGTH_SHORT).show());
 
         }

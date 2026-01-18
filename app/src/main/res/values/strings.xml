@@ -66,7 +66,7 @@
     <string name="key_wifi_usage" translatable="false">wifi_usage</string>
     <string name="app_version_format" formatted="true" translatable="false">NClientV3 %s</string>
     <string name="hashtag" translatable="false">#</string>
-    <string name="page_format" formatted="true" translatable="false">%d/%d</string>
+    <string name="page_format" formatted="true" translatable="false">%1$d/%2$d</string>
     <string name="percentage_format" formatted="true" translatable="false">%d%%</string>
     <string name="page_switcher_placeholder" translatable="false">0/0</string>
     <string name="page_placeholder" translatable="false">999/999</string>
@@ -407,5 +407,7 @@
     <string name="auth_error">Authentication error</string>
     <string name="auth_title">Biometric login for NClient</string>
     <string name="auth_subtitle">Log in using your biometric credential</string>
+    <string name="notifications_permission_title" translatable="false">Enable notifications</string>
+    <string name="notifications_permission_message" translatable="false">Allow notifications so downloads and exports can show progress and completion.</string>
 
 </resources>

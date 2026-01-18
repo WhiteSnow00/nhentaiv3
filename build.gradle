@@ -4,9 +4,6 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = 'https://jitpack.io'
-        }
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.2'
@@ -20,8 +17,13 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Limit JitPack resolution to the specific GitHub-hosted deps this project uses.
         maven {
             url = "https://jitpack.io"
+            content {
+                includeGroup "com.github.franmontiel"
+                includeGroup "com.github.yukuku"
+            }
         }
     }
     gradle.projectsEvaluated {

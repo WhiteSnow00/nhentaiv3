@@ -21,6 +21,7 @@ import com.maxwai.nclientv3.api.enums.Language;
 import com.maxwai.nclientv3.async.database.Queries;
 import com.maxwai.nclientv3.components.activities.BaseActivity;
 import com.maxwai.nclientv3.components.status.StatusManager;
+import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.settings.TagV2;
 import com.maxwai.nclientv3.utility.ImageDownloadUtility;
@@ -36,21 +37,19 @@ public class ListAdapter extends RecyclerView.Adapter<GenericAdapter.ViewHolder>
     private final SparseIntArray statuses = new SparseIntArray();
     private final List<SimpleGallery> mDataset;
     private final BaseActivity context;
-    private final String queryString;
+    private volatile String avoidedTagsQuery;
 
     public ListAdapter(BaseActivity cont) {
         this.context = cont;
-        this.mDataset = new ArrayList<>() {
-            @Override
-            public SimpleGallery get(int index) {
-                try {
-                    return super.get(index);
-                } catch (ArrayIndexOutOfBoundsException ignore) {
-                    return null;
-                }
-            }
-        };
-        queryString = TagV2.getAvoidedTags();
+        this.mDataset = new ArrayList<>();
+        avoidedTagsQuery = null;
+        Database.runOnReadyAsync(cont, () -> {
+            String q = TagV2.getAvoidedTags();
+            cont.runOnUiThread(() -> {
+                avoidedTagsQuery = q;
+                notifyDataSetChanged();
+            });
+        });
     }
 
     @NonNull
@@ -89,7 +88,8 @@ public class ListAdapter extends RecyclerView.Adapter<GenericAdapter.ViewHolder>
             params.height = Global.getGalleryHeight();
             card.setLayoutParams(params);
         }
-        holder.overlay.setVisibility((queryString != null && ent.hasIgnoredTags(queryString)) ? View.VISIBLE : View.GONE);
+        String query = avoidedTagsQuery;
+        holder.overlay.setVisibility((query != null && ent.hasIgnoredTags(query)) ? View.VISIBLE : View.GONE);
         loadGallery(holder, ent);
         holder.pages.setVisibility(View.GONE);
         holder.title.setText(ent.getTitle());
@@ -111,7 +111,8 @@ public class ListAdapter extends RecyclerView.Adapter<GenericAdapter.ViewHolder>
             if (context instanceof MainActivity)
                 ((MainActivity) context).setIdOpenedGallery(ent.getId());
             downloadGallery(ent);
-            holder.overlay.setVisibility((queryString != null && ent.hasIgnoredTags(queryString)) ? View.VISIBLE : View.GONE);
+            String q = avoidedTagsQuery;
+            holder.overlay.setVisibility((q != null && ent.hasIgnoredTags(q)) ? View.VISIBLE : View.GONE);
         });
         holder.overlay.setOnClickListener(v -> holder.overlay.setVisibility(View.GONE));
         holder.layout.setOnLongClickListener(v -> {
@@ -191,9 +192,9 @@ public class ListAdapter extends RecyclerView.Adapter<GenericAdapter.ViewHolder>
 
             LogUtility.d("Simple: " + g);
         }
-        prefetchStatusColors(galleries);
         LogUtility.d(String.format(Locale.US, "%s,old:%d,new:%d,len%d", this, c, mDataset.size(), galleries.size()));
         context.runOnUiThread(() -> notifyItemRangeInserted(c, galleries.size()));
+        prefetchStatusColors(galleries, c, galleries.size());
     }
 
     public void restartDataset(List<GenericGallery> galleries) {
@@ -209,11 +210,11 @@ public class ListAdapter extends RecyclerView.Adapter<GenericAdapter.ViewHolder>
         for (GenericGallery g : galleries)
             if (g instanceof SimpleGallery)
                 mDataset.add((SimpleGallery) g);
-        prefetchStatusColors(galleries);
         context.runOnUiThread(this::notifyDataSetChanged);
+        prefetchStatusColors(galleries, 0, mDataset.size());
     }
 
-    private void prefetchStatusColors(@NonNull List<GenericGallery> galleries) {
+    private void prefetchStatusColors(@NonNull List<GenericGallery> galleries, int startPosition, int itemCount) {
         if (galleries.isEmpty()) return;
         int[] ids = new int[galleries.size()];
         int count = 0;
@@ -227,12 +228,21 @@ public class ListAdapter extends RecyclerView.Adapter<GenericAdapter.ViewHolder>
         if (count == 0) return;
         int[] queryIds = new int[count];
         System.arraycopy(ids, 0, queryIds, 0, count);
-        SparseIntArray loaded = Queries.StatusMangaTable.getStatusColors(queryIds);
-        int defaultColor = StatusManager.getByName(StatusManager.DEFAULT_STATUS).color;
-        for (int i = 0; i < count; i++) {
-            int id = queryIds[i];
-            statuses.put(id, loaded.get(id, defaultColor));
-        }
+        final int countFinal = count;
+        final int[] queryIdsFinal = queryIds;
+        Database.runOnReadyAsync(context, () -> {
+            SparseIntArray loaded = Queries.StatusMangaTable.getStatusColors(queryIdsFinal);
+            int defaultColor = StatusManager.getByName(StatusManager.DEFAULT_STATUS).color;
+            for (int i = 0; i < countFinal; i++) {
+                int id = queryIdsFinal[i];
+                statuses.put(id, loaded.get(id, defaultColor));
+            }
+            if (itemCount > 0) {
+                context.runOnUiThread(() -> notifyItemRangeChanged(startPosition, itemCount));
+            } else {
+                context.runOnUiThread(this::notifyDataSetChanged);
+            }
+        });
     }
 
     public void resetStatuses() {

@@ -1,5 +1,7 @@
 package com.maxwai.nclientv3.components.activities;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.content.res.Configuration;
@@ -19,19 +21,44 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.maxwai.nclientv3.R;
 import com.maxwai.nclientv3.BuildConfig;
 import com.maxwai.nclientv3.components.views.CFTokenView;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.utility.LogUtility;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.lang.ref.WeakReference;
 
 public abstract class GeneralActivity extends AppCompatActivity {
+    private static final int REQ_POST_NOTIFICATIONS = 1003;
     private boolean isFastScrollerApplied = false;
     private static WeakReference<GeneralActivity> lastActivity;
     private CFTokenView tokenView = null;
+    @Nullable
+    private Runnable pendingPostNotificationsAction;
+
+    public void runWithPostNotificationsPermission(@NonNull Runnable action) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            action.run();
+            return;
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            action.run();
+            return;
+        }
+        pendingPostNotificationsAction = action;
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.notifications_permission_title)
+            .setMessage(R.string.notifications_permission_message)
+            .setPositiveButton(R.string.ok, (d, w) ->
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_POST_NOTIFICATIONS)
+            )
+            .setNegativeButton(R.string.cancel, (d, w) -> pendingPostNotificationsAction = null)
+            .show();
+    }
 
     public static @Nullable
     CFTokenView getLastCFView() {
@@ -104,6 +131,19 @@ public abstract class GeneralActivity extends AppCompatActivity {
             theme.applyStyle(R.style.AppTheme_Black, true);
         }
         return theme;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_POST_NOTIFICATIONS) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            Runnable r = pendingPostNotificationsAction;
+            pendingPostNotificationsAction = null;
+            if (granted && r != null) {
+                r.run();
+            }
+        }
     }
 
     private void logThemeDiagnostics(@NonNull String phase) {

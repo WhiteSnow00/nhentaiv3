@@ -14,7 +14,7 @@
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keepattributes SourceFile,LineNumberTable
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
@@ -33,7 +33,6 @@
 -assumenosideeffects class com.maxwai.nclientv3.utility.LogUtility {
     public static void d(...);
     public static void i(...);
-    public static void e(...);
 }
 
 # WorkManager uses reflection to instantiate workers from their (obfuscated) class names stored in WorkRequest.
@@ -42,3 +41,7 @@
     public <init>(android.content.Context, androidx.work.WorkerParameters);
 }
 -dontwarn com.bumptech.glide.load.resource.bitmap.VideoDecoder
+
+# jsoup optionally uses re2j; keep release minification working without bundling it.
+-dontwarn com.google.re2j.Matcher
+-dontwarn com.google.re2j.Pattern

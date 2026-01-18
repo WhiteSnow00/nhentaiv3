@@ -18,7 +18,7 @@ import com.maxwai.nclientv3.utility.LogUtility;
 import com.maxwai.nclientv3.utility.Utility;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -266,14 +266,28 @@ public class GalleryDownloaderV2 {
             if (r.code() != 200) {
                 return false;
             }
-            //noinspection DataFlowIssue
-            long expectedSize = Integer.parseInt(r.header("Content-Length", "-1"));
-            long len = r.body().contentLength();
-            if (len < 0 || expectedSize != len) {
+            if (r.body() == null) return false;
+            long written = Utility.writeStreamToFile(r.body().byteStream(), filePath);
+            if (written <= 0) {
+                //noinspection ResultOfMethodCallIgnored
+                filePath.delete();
                 return false;
             }
-            long written = Utility.writeStreamToFile(r.body().byteStream(), filePath);
-            if (written != len) {
+            // Do not require Content-Length consistency: servers may use chunked/gzip where lengths are unknown/mismatched.
+            String encoding = r.header("Content-Encoding");
+            String contentLengthHeader = r.header("Content-Length");
+            if (contentLengthHeader != null && (encoding == null || "identity".equalsIgnoreCase(encoding))) {
+                try {
+                    long expected = Long.parseLong(contentLengthHeader.trim());
+                    if (expected > 0 && written != expected) {
+                        //noinspection ResultOfMethodCallIgnored
+                        filePath.delete();
+                        return false;
+                    }
+                } catch (NumberFormatException ignore) {
+                }
+            }
+            if (isCorrupted(filePath)) {
                 //noinspection ResultOfMethodCallIgnored
                 filePath.delete();
                 return false;
@@ -334,8 +348,10 @@ public class GalleryDownloaderV2 {
     private void writeNoMedia() throws IOException {
         File nomedia = new File(folder, ".nomedia");
         LogUtility.d("NOMEDIA: " + nomedia + " for id " + id);
-        try (FileWriter writer = new FileWriter(nomedia)) {
-            gallery.jsonWrite(writer);
+        // Keep .nomedia empty (media scanner suppression only).
+        // Gallery metadata is stored in the app database.
+        try (FileOutputStream out = new FileOutputStream(nomedia, false)) {
+            out.flush();
         }
     }
 

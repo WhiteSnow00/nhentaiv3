@@ -4,7 +4,6 @@ import static androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK;
 import static androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL;
 
 import android.annotation.SuppressLint;
-import android.app.UiModeManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -234,20 +233,10 @@ public class GeneralPreferenceFragment extends PreferenceFragmentCompat {
                     .edit()
                     .putBoolean(getString(R.string.preference_key_black_theme), newTheme.equals(availableThemes[2])) // black
                     .apply();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    int theme;
-                    if (newTheme.equals(availableThemes[0])) { // light
-                        theme = UiModeManager.MODE_NIGHT_NO;
-                    } else if (newTheme.equals(availableThemes[1]) || newTheme.equals(availableThemes[2])) { // dark / black
-                        theme = UiModeManager.MODE_NIGHT_YES;
-                    } else {
-                        return false;
-                    }
-                    UiModeManager uim = (UiModeManager) act.getSystemService(Context.UI_MODE_SERVICE);
-                    uim.setApplicationNightMode(theme);
-                } else {
-                    CrashApplication.setDarkLightTheme(newTheme, act);
-                }
+                int mode = newTheme.equals(availableThemes[0]) // light
+                    ? AppCompatDelegate.MODE_NIGHT_NO
+                    : AppCompatDelegate.MODE_NIGHT_YES; // dark / black
+                ContextCompat.getMainExecutor(act).execute(() -> AppCompatDelegate.setDefaultNightMode(mode));
                 return true;
             });
         }
@@ -409,7 +398,7 @@ public class GeneralPreferenceFragment extends PreferenceFragmentCompat {
     }
 
     public void manageCustomPath() {
-        if (!Global.isExternalStorageManager()) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Global.isExternalStorageManager()) {
             act.requestStorageManager();
             return;
         }

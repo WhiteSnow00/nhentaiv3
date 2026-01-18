@@ -81,15 +81,11 @@ public class GalleryDownloaderManager {
         // Create the PendingIntent
 
         PendingIntent notifyPendingIntent;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            notifyPendingIntent = PendingIntent.getActivity(
-                context, 0, notifyIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE
-            );
-        } else {
-            notifyPendingIntent = PendingIntent.getActivity(
-                context, 0, notifyIntent, PendingIntent.FLAG_UPDATE_CURRENT
-            );
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
         }
+        notifyPendingIntent = PendingIntent.getActivity(context, 0, notifyIntent, flags);
         notification.setContentIntent(notifyPendingIntent);
     }
 

@@ -6,12 +6,12 @@ import com.maxwai.nclientv3.api.InspectorV3;
 import com.maxwai.nclientv3.api.components.Gallery;
 import com.maxwai.nclientv3.api.enums.SpecialTagIds;
 import com.maxwai.nclientv3.api.local.LocalGallery;
+import com.maxwai.nclientv3.async.database.Queries;
+import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.utility.LogUtility;
 
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 
 public class MetadataFetcher implements Runnable {
     private final Context context;
@@ -22,7 +22,9 @@ public class MetadataFetcher implements Runnable {
 
     @Override
     public void run() {
-        File[] files = Global.DOWNLOADFOLDER.listFiles();
+        File downloads = Global.DOWNLOADFOLDER;
+        if (downloads == null) return;
+        File[] files = downloads.listFiles();
         if (files == null) return;
         for (File f : files) {
             if (!f.isDirectory()) continue;
@@ -34,11 +36,13 @@ public class MetadataFetcher implements Runnable {
             if (inspector.getGalleries() == null || inspector.getGalleries().isEmpty())
                 continue;
             Gallery g = (Gallery) inspector.getGalleries().get(0);
-            try (FileWriter writer = new FileWriter(new File(lg.getDirectory(), ".nomedia"))) {
-                g.jsonWrite(writer);
-            } catch (IOException e) {
-                LogUtility.e("Error saving metadata", e);
-            }
+            Database.runOnReadyAsync(context, () -> {
+                try {
+                    Queries.GalleryTable.insert(g);
+                } catch (Throwable t) {
+                    LogUtility.e("Error saving metadata to DB", t);
+                }
+            });
         }
     }
 }

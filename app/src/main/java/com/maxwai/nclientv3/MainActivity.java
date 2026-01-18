@@ -93,7 +93,7 @@ public class MainActivity extends BaseActivity
     private final InspectorV3.InspectorResponse addDataset = new MainInspectorResponse() {
         @Override
         public void onSuccess(List<GenericGallery> galleries) {
-            adapter.addGalleries(galleries);
+            runOnUiThread(() -> adapter.addGalleries(galleries));
         }
     };
     //views
@@ -111,9 +111,11 @@ public class MainActivity extends BaseActivity
         @Override
         public void onSuccess(List<GenericGallery> galleries) {
             super.onSuccess(galleries);
-            adapter.restartDataset(galleries);
-            showPageSwitcher(inspector.getPage(), inspector.getPageCount());
-            runOnUiThread(() -> recycler.smoothScrollToPosition(0));
+            runOnUiThread(() -> {
+                adapter.restartDataset(galleries);
+                showPageSwitcher(inspector.getPage(), inspector.getPageCount());
+                recycler.smoothScrollToPosition(0);
+            });
         }
     };
     final Runnable changeLanguageRunnable = () -> {
@@ -220,7 +222,6 @@ public class MainActivity extends BaseActivity
     private void initializeRecyclerView() {
         adapter = new ListAdapter(this);
         recycler.setAdapter(adapter);
-        recycler.setHasFixedSize(true);
         //recycler.setItemViewCacheSize(24);
         recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override

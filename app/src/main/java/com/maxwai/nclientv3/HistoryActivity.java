@@ -11,6 +11,7 @@ import androidx.appcompat.widget.Toolbar;
 import com.maxwai.nclientv3.adapters.ListAdapter;
 import com.maxwai.nclientv3.async.database.Queries;
 import com.maxwai.nclientv3.components.activities.BaseActivity;
+import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.utility.Utility;
 
@@ -34,9 +35,13 @@ public class HistoryActivity extends BaseActivity {
         recycler = findViewById(R.id.recycler);
         masterLayout = findViewById(R.id.master_layout);
         adapter = new ListAdapter(this);
-        adapter.addGalleries(new ArrayList<>(Queries.HistoryTable.getHistory()));
         changeLayout(getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE);
         recycler.setAdapter(adapter);
+        Database.runOnReadyAsync(this, () -> {
+            ArrayList<com.maxwai.nclientv3.api.components.GenericGallery> history =
+                new ArrayList<>(Queries.HistoryTable.getHistory());
+            runOnUiThread(() -> adapter.restartDataset(history));
+        });
     }
 
     @Override
