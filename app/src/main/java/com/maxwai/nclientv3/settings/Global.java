@@ -258,6 +258,18 @@ public class Global {
     public static void initFromShared(@NonNull Context context) {
         Login.initLogin(context);
         SharedPreferences shared = context.getSharedPreferences("Settings", 0);
+        // Keep theme_select and legacy black_theme flag consistent (older installs can get out of sync).
+        try {
+            String theme = shared.getString(context.getString(R.string.preference_key_theme_select), "dark");
+            boolean shouldBeBlack = "black".equals(theme);
+            boolean isBlack = shared.getBoolean(context.getString(R.string.preference_key_black_theme), false);
+            if (isBlack != shouldBeBlack) {
+                shared.edit().putBoolean(context.getString(R.string.preference_key_black_theme), shouldBeBlack).apply();
+                LogUtility.w("Fixing theme prefs mismatch: theme_select=", theme, " black_theme(old)=", isBlack, " black_theme(new)=", shouldBeBlack);
+            }
+        } catch (Throwable t) {
+            LogUtility.w("Unable to validate theme prefs", t);
+        }
         initHttpClient(context);
         initTitleType(context);
         loadNotificationChannel(context);

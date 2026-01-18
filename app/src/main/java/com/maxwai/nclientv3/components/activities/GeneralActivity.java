@@ -3,6 +3,10 @@ package com.maxwai.nclientv3.components.activities;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.content.res.Configuration;
+import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
@@ -61,6 +65,21 @@ public abstract class GeneralActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Global.initActivity(this);
+        if (BuildConfig.DEBUG) logThemeDiagnostics("onCreate");
+    }
+
+    @Override
+    protected void onPostCreate(@Nullable Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+        // Defense-in-depth against OEM "Darken apps" that may ignore android:forceDarkAllowed.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                getWindow().getDecorView().setForceDarkAllowed(false);
+            } catch (Throwable t) {
+                LogUtility.w("Unable to disable force dark on decor view", t);
+            }
+        }
+        if (BuildConfig.DEBUG) logThemeDiagnostics("onPostCreate");
     }
 
     @Override
@@ -68,7 +87,7 @@ public abstract class GeneralActivity extends AppCompatActivity {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
         super.onResume();
         lastActivity = new WeakReference<>(this);
-        if (BuildConfig.DEBUG) logThemeDiagnostics();
+        if (BuildConfig.DEBUG) logThemeDiagnostics("onResume");
         if (!isFastScrollerApplied) {
             isFastScrollerApplied = true;
             Global.applyFastScroller(findViewById(R.id.recycler));
@@ -85,14 +104,47 @@ public abstract class GeneralActivity extends AppCompatActivity {
         return theme;
     }
 
-    private void logThemeDiagnostics() {
+    private void logThemeDiagnostics(@NonNull String phase) {
         try {
             SharedPreferences preferences = getSharedPreferences("Settings", 0);
             boolean blackTheme = preferences.getBoolean(getString(R.string.preference_key_black_theme), false);
             int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+            Integer background = resolveThemeColor(android.R.attr.colorBackground);
             Integer surface = resolveThemeColor(com.google.android.material.R.attr.colorSurface);
             Integer onSurface = resolveThemeColor(com.google.android.material.R.attr.colorOnSurface);
-            LogUtility.d("ThemeDiagnostics night=", night, " blackTheme=", blackTheme, " colorSurface=", surface, " colorOnSurface=", onSurface);
+            Integer primary = resolveThemeColor(com.google.android.material.R.attr.colorPrimary);
+            Integer onPrimary = resolveThemeColor(com.google.android.material.R.attr.colorOnPrimary);
+
+            int activityTheme = 0;
+            int appTheme = 0;
+            try {
+                PackageManager pm = getPackageManager();
+                ActivityInfo ai = pm.getActivityInfo(getComponentName(), 0);
+                ApplicationInfo appInfo = pm.getApplicationInfo(getPackageName(), 0);
+                activityTheme = ai.themeResource;
+                appTheme = appInfo.theme;
+            } catch (Exception ignored) {
+            }
+
+            LogUtility.i(
+                "ThemeDiagnostics",
+                "phase=", phase,
+                "night=", night,
+                "blackTheme=", blackTheme,
+                "activityThemeRes=", activityTheme,
+                "appThemeRes=", appTheme,
+                "colorBackground=", background,
+                "colorSurface=", surface,
+                "colorOnSurface=", onSurface,
+                "colorPrimary=", primary,
+                "colorOnPrimary=", onPrimary
+            );
+
+            try {
+                PackageInfo pInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+                LogUtility.i("ThemeDiagnostics", "versionName=", pInfo.versionName, "versionCode=", pInfo.getLongVersionCode(), "debug=", BuildConfig.DEBUG);
+            } catch (Exception ignored) {
+            }
         } catch (Throwable t) {
             LogUtility.w("ThemeDiagnostics failed", t);
         }

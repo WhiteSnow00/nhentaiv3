@@ -27,6 +27,7 @@ import com.maxwai.nclientv3.settings.TagV2;
 import com.maxwai.nclientv3.utility.AppExecutors;
 import com.maxwai.nclientv3.utility.LogUtility;
 import com.maxwai.nclientv3.utility.network.NetworkUtil;
+import com.maxwai.nclientv3.BuildConfig;
 
 import java.io.File;
 
@@ -47,6 +48,7 @@ public class CrashApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        LogUtility.i("BOOT_MARKER theme-compat-2026-01-18b", "pkg=", getPackageName(), "vc=", BuildConfig.VERSION_CODE, "vn=", BuildConfig.VERSION_NAME, "debug=", BuildConfig.DEBUG);
         AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
         //noinspection resource
         Database.setDatabase(new DatabaseHelper(getApplicationContext()).getWritableDatabase());
