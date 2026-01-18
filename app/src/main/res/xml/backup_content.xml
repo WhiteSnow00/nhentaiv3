@@ -7,8 +7,4 @@
     <include
         domain="sharedpref"
         path="." />
-    <!-- Do not back up persisted cookies / session state (CookiePersistor uses SharedPreferences "Login"). -->
-    <exclude
-        domain="sharedpref"
-        path="Login.xml" />
 </full-backup-content>

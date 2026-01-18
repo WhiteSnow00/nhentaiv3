@@ -7,15 +7,19 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.View;
 
 import androidx.annotation.DeprecatedSinceApi;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.maxwai.nclientv3.R;
-import com.maxwai.nclientv3.utility.DebugTrace;
+import com.maxwai.nclientv3.async.database.DatabaseHelper;
 import com.maxwai.nclientv3.async.downloader.DownloadGalleryV2;
 import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
@@ -44,14 +48,13 @@ public class CrashApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        DebugTrace.log("CrashApplication.onCreate", null, null, "pkg=" + getPackageName());
         LogUtility.i("BOOT_MARKER theme-compat-2026-01-18b", "pkg=", getPackageName(), "vc=", BuildConfig.VERSION_CODE, "vn=", BuildConfig.VERSION_NAME, "debug=", BuildConfig.DEBUG);
         AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
-        Database.initAsync(this);
+        //noinspection resource
+        Database.setDatabase(new DatabaseHelper(getApplicationContext()).getWritableDatabase());
         String version = Global.getLastVersion(this);
         String actualVersion = Global.getVersionName(this);
         SharedPreferences preferences = getSharedPreferences("Settings", 0);
-        applyThemeFromPreferences(preferences);
         if (!actualVersion.equals(version))
             afterUpdateChecks(preferences, version);
 
@@ -60,7 +63,7 @@ public class CrashApplication extends Application {
         TagV2.initMinCount(this);
         TagV2.initSortByName(this);
         // Avoid disk/DB work on the main thread during cold start.
-        Database.runOnReady(this, () -> {
+        AppExecutors.io().execute(() -> {
             try {
                 DownloadGalleryV2.loadDownloads(this);
             } catch (Throwable t) {
@@ -68,17 +71,9 @@ public class CrashApplication extends Application {
             }
         });
         registerActivityLifecycleCallbacks(new CustomActivityLifecycleCallback());
-    }
-
-    private void applyThemeFromPreferences(@NonNull SharedPreferences preferences) {
-        try {
-            String theme = preferences.getString(getString(R.string.preference_key_theme_select), null);
-            if (theme == null) return;
-            String[] availableThemes = getResources().getStringArray(R.array.theme_data);
-            int mode = theme.equals(availableThemes[0]) ? AppCompatDelegate.MODE_NIGHT_NO : AppCompatDelegate.MODE_NIGHT_YES;
-            AppCompatDelegate.setDefaultNightMode(mode);
-        } catch (Throwable t) {
-            LogUtility.w("Unable to apply theme at startup", t);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            String theme = preferences.getString(getString(R.string.preference_key_theme_select), "");
+            setDarkLightTheme(theme, this);
         }
     }
 
@@ -132,7 +127,17 @@ public class CrashApplication extends Application {
 
         @Override
         public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
-            // No-op: rely on default decor fitting and per-layout fitsSystemWindows to avoid double-applying insets.
+            View rootView = activity.getWindow().getDecorView().getRootView();
+            ViewCompat.setOnApplyWindowInsetsListener(rootView, (v, insets) -> {
+                Insets barsInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                v.setPadding(
+                    barsInsets.left,
+                    barsInsets.top,
+                    barsInsets.right,
+                    barsInsets.bottom
+                );
+                return WindowInsetsCompat.CONSUMED;
+            });
         }
 
         @Override

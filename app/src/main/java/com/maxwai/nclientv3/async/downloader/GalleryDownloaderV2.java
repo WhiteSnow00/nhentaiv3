@@ -13,14 +13,12 @@ import com.maxwai.nclientv3.api.InspectorV3;
 import com.maxwai.nclientv3.api.components.Gallery;
 import com.maxwai.nclientv3.api.local.LocalGallery;
 import com.maxwai.nclientv3.async.database.Queries;
-import com.maxwai.nclientv3.settings.Database;
 import com.maxwai.nclientv3.settings.Global;
-import com.maxwai.nclientv3.utility.GalleryMetadataStore;
 import com.maxwai.nclientv3.utility.LogUtility;
 import com.maxwai.nclientv3.utility.Utility;
 
 import java.io.File;
-import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -121,25 +119,9 @@ public class GalleryDownloaderV2 {
 
     private void onEnd() {
         setStatus(Status.FINISHED);
-        persistDownloadedMetadata();
         for (DownloadObserver observer : observers) observer.triggerEndDownload(this);
         LogUtility.d("Delete 75: " + id);
         Queries.DownloadTable.removeGallery(id);
-    }
-
-    private void persistDownloadedMetadata() {
-        if (gallery == null || folder == null) return;
-        try {
-            Database.ensureInitialized(context);
-            Queries.GalleryTable.insert(gallery);
-        } catch (Throwable t) {
-            LogUtility.e("Error saving downloaded metadata to DB", t);
-        }
-        try {
-            GalleryMetadataStore.writeSidecar(folder, gallery);
-        } catch (Throwable t) {
-            LogUtility.e("Error writing downloaded metadata sidecar", t);
-        }
     }
 
     private void onUpdate() {
@@ -284,28 +266,14 @@ public class GalleryDownloaderV2 {
             if (r.code() != 200) {
                 return false;
             }
-            if (r.body() == null) return false;
-            long written = Utility.writeStreamToFile(r.body().byteStream(), filePath);
-            if (written <= 0) {
-                //noinspection ResultOfMethodCallIgnored
-                filePath.delete();
+            //noinspection DataFlowIssue
+            long expectedSize = Integer.parseInt(r.header("Content-Length", "-1"));
+            long len = r.body().contentLength();
+            if (len < 0 || expectedSize != len) {
                 return false;
             }
-            // Do not require Content-Length consistency: servers may use chunked/gzip where lengths are unknown/mismatched.
-            String encoding = r.header("Content-Encoding");
-            String contentLengthHeader = r.header("Content-Length");
-            if (contentLengthHeader != null && (encoding == null || "identity".equalsIgnoreCase(encoding))) {
-                try {
-                    long expected = Long.parseLong(contentLengthHeader.trim());
-                    if (expected > 0 && written != expected) {
-                        //noinspection ResultOfMethodCallIgnored
-                        filePath.delete();
-                        return false;
-                    }
-                } catch (NumberFormatException ignore) {
-                }
-            }
-            if (isCorrupted(filePath)) {
+            long written = Utility.writeStreamToFile(r.body().byteStream(), filePath);
+            if (written != len) {
                 //noinspection ResultOfMethodCallIgnored
                 filePath.delete();
                 return false;
@@ -366,10 +334,8 @@ public class GalleryDownloaderV2 {
     private void writeNoMedia() throws IOException {
         File nomedia = new File(folder, ".nomedia");
         LogUtility.d("NOMEDIA: " + nomedia + " for id " + id);
-        // Keep .nomedia empty (media scanner suppression only).
-        // Gallery metadata is stored in the app database.
-        try (FileOutputStream out = new FileOutputStream(nomedia, false)) {
-            out.flush();
+        try (FileWriter writer = new FileWriter(nomedia)) {
+            gallery.jsonWrite(writer);
         }
     }
 

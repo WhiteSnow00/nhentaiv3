@@ -14,8 +14,6 @@ import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.FileProvider;
 import androidx.work.Data;
-import androidx.work.Constraints;
-import androidx.work.BackoffPolicy;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 import androidx.work.WorkRequest;
@@ -24,10 +22,8 @@ import androidx.work.WorkerParameters;
 
 import com.maxwai.nclientv3.R;
 import com.maxwai.nclientv3.api.local.LocalGallery;
-import com.maxwai.nclientv3.components.activities.GeneralActivity;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.settings.NotificationSettings;
-import com.maxwai.nclientv3.utility.FileShareUtil;
 import com.maxwai.nclientv3.utility.LogUtility;
 
 import java.io.File;
@@ -51,22 +47,8 @@ public class CreatePdfOrZip extends Worker {
     }
 
     public static void startWork(Context context, LocalGallery gallery, boolean pdf) {
-        if (context instanceof GeneralActivity) {
-            ((GeneralActivity) context).runWithPostNotificationsPermission(() -> startWorkInternal(context, gallery, pdf));
-            return;
-        }
-        startWorkInternal(context, gallery, pdf);
-    }
-
-    private static void startWorkInternal(Context context, LocalGallery gallery, boolean pdf) {
         String directory = gallery.getDirectory().getAbsolutePath();
-        Constraints constraints = new Constraints.Builder()
-            .setRequiresBatteryNotLow(true)
-            .setRequiresStorageNotLow(true)
-            .build();
         WorkRequest createPdfOrZipWorkRequest = new OneTimeWorkRequest.Builder(CreatePdfOrZip.class)
-            .setConstraints(constraints)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, java.time.Duration.ofMinutes(5))
             .setInputData(new Data.Builder()
                 .putString(GALLERY_DIR_KEY, directory)
                 .putBoolean(PDF_OR_ZIP_KEY, pdf)
@@ -114,29 +96,7 @@ public class CreatePdfOrZip extends Worker {
                 for (int a = 1; a <= gallery.getPageCount(); a++) {
                     page = gallery.getPage(a);
                     if (page == null) continue;
-                    Bitmap bitmap = null;
-                    try {
-                        final int maxDim = 2048;
-                        BitmapFactory.Options bounds = new BitmapFactory.Options();
-                        bounds.inJustDecodeBounds = true;
-                        BitmapFactory.decodeFile(page.getAbsolutePath(), bounds);
-                        int sample = 1;
-                        int longest = Math.max(bounds.outWidth, bounds.outHeight);
-                        while (longest > 0 && (longest / sample) > maxDim) {
-                            sample *= 2;
-                        }
-                        BitmapFactory.Options opts = new BitmapFactory.Options();
-                        opts.inSampleSize = Math.max(1, sample);
-                        opts.inPreferredConfig = Bitmap.Config.RGB_565;
-                        bitmap = BitmapFactory.decodeFile(page.getAbsolutePath(), opts);
-                    } catch (OutOfMemoryError oom) {
-                        LogUtility.e("OOM decoding page for PDF: " + page, new RuntimeException(oom));
-                        notification.setContentTitle(getApplicationContext().getString(R.string.error_pdf));
-                        notification.setContentText(getApplicationContext().getString(R.string.failed));
-                        notification.setProgress(0, 0, false);
-                        NotificationSettings.notify(getApplicationContext(), notId, notification.build());
-                        return Result.failure();
-                    }
+                    Bitmap bitmap = BitmapFactory.decodeFile(page.getAbsolutePath());
                     if (bitmap != null) {
                         PdfDocument.PageInfo info = new PdfDocument.PageInfo.Builder(bitmap.getWidth(), bitmap.getHeight(), a).create();
                         PdfDocument.Page p = document.startPage(info);
@@ -230,9 +190,8 @@ public class CreatePdfOrZip extends Worker {
     private void createIntentOpen(File finalPath, boolean pdf) {
         try {
             Intent i = new Intent(Intent.ACTION_VIEW);
-            File shareable = FileShareUtil.ensureShareableCopy(getApplicationContext(), finalPath);
             Uri apkURI = FileProvider.getUriForFile(
-                getApplicationContext(), getApplicationContext().getPackageName() + ".provider", shareable);
+                getApplicationContext(), getApplicationContext().getPackageName() + ".provider", finalPath);
             i.setDataAndType(apkURI, pdf ? "application/pdf" : "application/zip");
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             i.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
@@ -242,13 +201,9 @@ public class CreatePdfOrZip extends Worker {
                 getApplicationContext().grantUriPermission(packageName, apkURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             }
 
-            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                flags |= PendingIntent.FLAG_IMMUTABLE;
-            }
-            notification.setContentIntent(PendingIntent.getActivity(getApplicationContext(), 0, i, flags));
+            notification.setContentIntent(PendingIntent.getActivity(getApplicationContext(), 0, i, PendingIntent.FLAG_MUTABLE));
             LogUtility.d(apkURI.toString());
-        } catch (Exception ignore) {//sometimes the uri isn't available
+        } catch (IllegalArgumentException ignore) {//sometimes the uri isn't available
 
         }
     }

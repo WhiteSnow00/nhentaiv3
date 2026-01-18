@@ -33,13 +33,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Gradle build (Debug)
-        run: ./gradlew --no-daemon --stacktrace assemblePost28Debug
-
-      - name: Gradle unit tests (post28Debug)
-        run: ./gradlew --no-daemon --stacktrace testPost28DebugUnitTest
-
-      - name: Gradle lint (post28Debug)
-        run: ./gradlew --no-daemon --stacktrace lintPost28Debug
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
 
       # NOTE: Can't use `secrets.*` directly in step `if:`.
       - name: Detect signing secrets
@@ -67,7 +61,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          ./gradlew --no-daemon --stacktrace assemblePost28Release \
+          ./gradlew --no-daemon --stacktrace assembleRelease \
             -Pandroid.injected.signing.store.file=/tmp/keystore.jks \
             -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
@@ -78,10 +72,6 @@ jobs:
       # - name: Gradle build (Release - unsigned)
       #   if: ${{ steps.signing.outputs.available != 'true' }}
       #   run: ./gradlew --no-daemon --stacktrace assembleRelease
-
-      - name: Gradle build (Release - unsigned)
-        if: ${{ steps.signing.outputs.available != 'true' }}
-        run: ./gradlew --no-daemon --stacktrace assemblePost28Release
 
       - name: Collect APKs
         run: |

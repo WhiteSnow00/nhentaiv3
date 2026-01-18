@@ -57,7 +57,6 @@ import com.maxwai.nclientv3.components.widgets.CustomGridLayoutManager;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.settings.Login;
 import com.maxwai.nclientv3.settings.TagV2;
-import com.maxwai.nclientv3.utility.DebugTrace;
 import com.maxwai.nclientv3.utility.ImageDownloadUtility;
 import com.maxwai.nclientv3.utility.LogUtility;
 import com.maxwai.nclientv3.utility.Utility;
@@ -94,7 +93,7 @@ public class MainActivity extends BaseActivity
     private final InspectorV3.InspectorResponse addDataset = new MainInspectorResponse() {
         @Override
         public void onSuccess(List<GenericGallery> galleries) {
-            runOnUiThread(() -> adapter.addGalleries(galleries));
+            adapter.addGalleries(galleries);
         }
     };
     //views
@@ -112,11 +111,9 @@ public class MainActivity extends BaseActivity
         @Override
         public void onSuccess(List<GenericGallery> galleries) {
             super.onSuccess(galleries);
-            runOnUiThread(() -> {
-                adapter.restartDataset(galleries);
-                showPageSwitcher(inspector.getPage(), inspector.getPageCount());
-                recycler.smoothScrollToPosition(0);
-            });
+            adapter.restartDataset(galleries);
+            showPageSwitcher(inspector.getPage(), inspector.getPageCount());
+            runOnUiThread(() -> recycler.smoothScrollToPosition(0));
         }
     };
     final Runnable changeLanguageRunnable = () -> {
@@ -133,7 +130,6 @@ public class MainActivity extends BaseActivity
         setContentView(R.layout.activity_main);
         //load inspector
         selectStartMode(getIntent(), getPackageName());
-        DebugTrace.log("MainActivity.onCreate", this, savedInstanceState, "modeType=" + modeType);
         LogUtility.d("Main started with mode " + modeType);
         //init views and actions
         findUsefulViews();
@@ -224,6 +220,7 @@ public class MainActivity extends BaseActivity
     private void initializeRecyclerView() {
         adapter = new ListAdapter(this);
         recycler.setAdapter(adapter);
+        recycler.setHasFixedSize(true);
         //recycler.setItemViewCacheSize(24);
         recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
@@ -489,7 +486,6 @@ public class MainActivity extends BaseActivity
     @Override
     protected void onResume() {
         super.onResume();
-        DebugTrace.log("MainActivity.onResume", this, null, "modeType=" + modeType);
         com.maxwai.nclientv3.settings.Login.initLogin(this);
         if (idOpenedGallery != -1) {
             adapter.updateColor(idOpenedGallery);

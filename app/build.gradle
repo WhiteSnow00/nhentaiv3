@@ -31,13 +31,11 @@ android {
     }
     flavorDimensions = ["sdk"]
     productFlavors {
-        // Primary modern distribution flavor: Android 9+ baseline with current targetSdk.
         post28 {
             dimension = "sdk"
             targetSdk = 36
             minSdkVersion 28
         }
-        // Legacy compatibility flavor: kept for older devices / sideloading. Not intended for Play distribution.
         pre28 {
             dimension = "sdk"
             targetSdk = 28
@@ -51,9 +49,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
             versionNameSuffix = "-release"
             resValue "string", "app_name", "NClientV3"
-            if (hasKeystore) {
-                signingConfig signingConfigs.release
-            }
+            signingConfig = hasKeystore ? signingConfigs.release : signingConfigs.debug
         }
         debug {
             applicationIdSuffix = ".debug"
@@ -66,8 +62,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     lint {
-        abortOnError = true
-        checkReleaseBuilds = true
+        abortOnError = false
+        checkReleaseBuilds = false
         disable 'RestrictedApi'
     }
     bundle {

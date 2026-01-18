@@ -43,7 +43,6 @@ import com.franmontiel.persistentcookiejar.persistence.SharedPrefsCookiePersisto
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -155,53 +154,22 @@ public class Global {
 
     @Nullable
     public static String getDefaultFileParent(Context context) {
-        File f = null;
-        f = context.getExternalFilesDir(null);
-        if (f == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        File f;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            f = context.getExternalFilesDir(null);
+        } else {
             f = Environment.getExternalStorageDirectory();
         }
-        if (f == null) f = context.getFilesDir();
-        if (f == null) f = context.getCacheDir();
         return f == null ? null : f.getAbsolutePath();
-    }
-
-    private static boolean isSameOrChildOf(@NonNull File child, @NonNull File parent) {
-        try {
-            String childPath = child.getCanonicalPath();
-            String parentPath = parent.getCanonicalPath();
-            if (childPath.equals(parentPath)) return true;
-            if (!parentPath.endsWith(File.separator)) parentPath = parentPath + File.separator;
-            return childPath.startsWith(parentPath);
-        } catch (IOException e) {
-            String childPath = child.getAbsolutePath();
-            String parentPath = parent.getAbsolutePath();
-            if (childPath.equals(parentPath)) return true;
-            if (!parentPath.endsWith(File.separator)) parentPath = parentPath + File.separator;
-            return childPath.startsWith(parentPath);
-        }
-    }
-
-    private static boolean isAppScopedStoragePath(@NonNull Context context, @NonNull File rootFolder) {
-        for (File f : context.getExternalFilesDirs(null)) {
-            if (f != null && isSameOrChildOf(rootFolder, f)) return true;
-        }
-        return isSameOrChildOf(rootFolder, context.getFilesDir()) || isSameOrChildOf(rootFolder, context.getCacheDir());
     }
 
     private static void initFilesTree(@NonNull Context context) {
         List<File> files = getUsableFolders(context);
-        String defaultParent = getDefaultFileParent(context);
-        if (defaultParent == null) defaultParent = context.getFilesDir().getAbsolutePath();
-        String path = context.getSharedPreferences("Settings", Context.MODE_PRIVATE)
-            .getString(context.getString(R.string.preference_key_save_path), defaultParent);
-        if (path == null || path.trim().isEmpty()) path = defaultParent;
+        String path = context.getSharedPreferences("Settings", Context.MODE_PRIVATE).getString(context.getString(R.string.preference_key_save_path), Objects.requireNonNull(getDefaultFileParent(context)));
         File ROOTFOLDER = new File(path);
-        boolean allowedByList = files.contains(ROOTFOLDER);
-        boolean allowedAppScoped = isAppScopedStoragePath(context, ROOTFOLDER);
-        // In case the permission is removed or the selected location is no longer accessible.
-        if (!allowedByList && !allowedAppScoped && !isExternalStorageManager()) {
-            ROOTFOLDER = new File(defaultParent);
-        }
+        //in case the permission is removed
+        if (!files.contains(ROOTFOLDER) && !isExternalStorageManager())
+            ROOTFOLDER = new File(Objects.requireNonNull(getDefaultFileParent(context)));
         MAINFOLDER = new File(ROOTFOLDER, MAINFOLDER_NAME);
         LogUtility.d(MAINFOLDER);
         DOWNLOADFOLDER = new File(MAINFOLDER, DOWNLOADFOLDER_NAME);
@@ -411,12 +379,6 @@ public class Global {
                     new SharedPrefsCookiePersistor(preferences)
                 )
             );
-        builder
-            .retryOnConnectionFailure(true)
-            .connectTimeout(Duration.ofSeconds(15))
-            .readTimeout(Duration.ofSeconds(30))
-            .writeTimeout(Duration.ofSeconds(30))
-            .callTimeout(Duration.ofMinutes(5));
         builder.addInterceptor(new CustomInterceptor(context.getApplicationContext(), true));
         client = builder.build();
         client.dispatcher().setMaxRequests(25);
@@ -519,17 +481,17 @@ public class Global {
     }
 
     public static void initStorage(Context context) {
+        if (!Global.hasStoragePermission(context)) return;
         Global.initFilesTree(context);
-        if (Global.MAINFOLDER == null) return;
         boolean[] bools = new boolean[]{
             Global.MAINFOLDER.mkdirs(),
-            Global.DOWNLOADFOLDER != null && Global.DOWNLOADFOLDER.mkdirs(),
-            Global.PDFFOLDER != null && Global.PDFFOLDER.mkdirs(),
-            Global.UPDATEFOLDER != null && Global.UPDATEFOLDER.mkdirs(),
-            Global.SCREENFOLDER != null && Global.SCREENFOLDER.mkdirs(),
-            Global.ZIPFOLDER != null && Global.ZIPFOLDER.mkdirs(),
-            Global.TORRENTFOLDER != null && Global.TORRENTFOLDER.mkdirs(),
-            Global.BACKUPFOLDER != null && Global.BACKUPFOLDER.mkdirs(),
+            Global.DOWNLOADFOLDER.mkdir(),
+            Global.PDFFOLDER.mkdir(),
+            Global.UPDATEFOLDER.mkdir(),
+            Global.SCREENFOLDER.mkdir(),
+            Global.ZIPFOLDER.mkdir(),
+            Global.TORRENTFOLDER.mkdir(),
+            Global.BACKUPFOLDER.mkdir(),
         };
         LogUtility.d(
             "0:" + context.getFilesDir() + '\n' +
@@ -617,47 +579,20 @@ public class Global {
 
     public static List<File> getUsableFolders(Context context) {
         List<File> strings = new ArrayList<>(3);
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            File external = Environment.getExternalStorageDirectory();
-            if (external != null) strings.add(external);
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+            strings.add(Environment.getExternalStorageDirectory());
 
         File[] files = context.getExternalFilesDirs(null);
-        for (File f : files) {
-            if (f != null) strings.add(f);
-        }
+        strings.addAll(Arrays.asList(files));
         return strings;
     }
 
     public static boolean hasStoragePermission(Context context) {
-        if (context == null) return false;
-        context = context.getApplicationContext();
-
-        String defaultParent = getDefaultFileParent(context);
-        if (defaultParent == null) defaultParent = context.getFilesDir().getAbsolutePath();
-        String selected = context.getSharedPreferences("Settings", 0)
-            .getString(context.getString(R.string.preference_key_save_path), defaultParent);
-        if (selected == null || selected.trim().isEmpty()) selected = defaultParent;
-        File rootFolder = new File(selected);
-
-        if (isAppScopedStoragePath(context, rootFolder)) return true;
-
-        int targetSdk = context.getApplicationInfo().targetSdkVersion;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11+: non-app-scoped access requires all-files permission for modern targets.
-            if (targetSdk >= Build.VERSION_CODES.R) {
-                return Environment.isExternalStorageManager();
-            }
-            // Legacy targets may still rely on WRITE_EXTERNAL_STORAGE for broad external storage access.
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return true; //We don't check permission on Android 13
+        } else {
             return ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 10: modern targets are scoped; legacy targets can still rely on legacy permissions.
-            if (targetSdk >= Build.VERSION_CODES.Q) return false;
-        }
-
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
 
     public static boolean isJPEGCorrupted(String path) {
@@ -736,7 +671,7 @@ public class Global {
     }
 
     public static boolean isExternalStorageManager() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager();
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager();
     }
 
     public static void applyFastScroller(RecyclerView recycler) {

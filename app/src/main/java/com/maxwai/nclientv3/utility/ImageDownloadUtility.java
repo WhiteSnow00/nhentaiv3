@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Handler;
 import android.widget.ImageView;
 
 import androidx.annotation.DrawableRes;
@@ -16,6 +17,7 @@ import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.GlideException;
 import com.bumptech.glide.load.resource.bitmap.Rotate;
 import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.ImageViewTarget;
 import com.bumptech.glide.request.target.Target;
 import com.maxwai.nclientv3.api.components.Gallery;
 import com.maxwai.nclientv3.api.enums.ImageExt;
@@ -25,10 +27,15 @@ import com.maxwai.nclientv3.settings.Global;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 public class ImageDownloadUtility {
+
+    private static final Map<Gallery, List<Runnable>> imageDownloadQueue = new HashMap<>();
 
     public static void preloadImage(Context context, Uri url) {
         if (Global.getDownloadPolicy() == Global.DataUsageType.NONE) return;
@@ -64,30 +71,62 @@ public class ImageDownloadUtility {
             loadLogo(view);
             return;
         }
-        Uri model = url.get();
-        LogUtility.d("Requested url glide: " + model);
-        RequestManager glide = GlideX.with(view);
-        if (glide == null) return;
-        Drawable logo = Global.getLogo(context.getResources());
-        RequestBuilder<Drawable> dra = glide.load(model);
-        if (angle != 0) dra = dra.transform(new Rotate(angle));
-        dra.error(logo)
-            .addListener(new RequestListener<>() {
-                @Override
-                public boolean onLoadFailed(@Nullable GlideException e, @Nullable Object model, @NonNull Target<Drawable> target, boolean isFirstResource) {
-                    view.post(errorRunnable);
-                    return false;
-                }
+        boolean newGallery = false;
+        if (!imageDownloadQueue.containsKey(gallery)) {
+            imageDownloadQueue.put(gallery, new LinkedList<>());
+            newGallery = true;
+        }
+        //noinspection DataFlowIssue
+        imageDownloadQueue.get(gallery).add(() -> {
+            LogUtility.d("Requested url glide: " + url.get());
+            RequestManager glide = GlideX.with(context);
+            if (glide == null) return;
+            Drawable logo = Global.getLogo(context.getResources());
+            RequestBuilder<Drawable> dra = glide.load(url.get());
+            if (angle != 0)
+                dra = dra.transform(new Rotate(angle));
+            dra.error(logo)
+                .addListener(new RequestListener<>() {
+                    @Override
+                    public boolean onLoadFailed(@Nullable GlideException e, @Nullable Object model, @NonNull Target<Drawable> target, boolean isFirstResource) {
+                        new Handler(context.getMainLooper()).post(errorRunnable);
+                        return false;
+                    }
 
-                @Override
-                public boolean onResourceReady(@NonNull Drawable resource, @NonNull Object model, Target<Drawable> target, @NonNull DataSource dataSource, boolean isFirstResource) {
-                    if (gallery != null && !gallery.getGalleryData().getCheckedExt())
-                        gallery.getGalleryData().setCheckedExt();
-                    return false;
-                }
-            })
-            .placeholder(logo)
-            .into(view);
+                    @Override
+                    public boolean onResourceReady(@NonNull Drawable resource, @NonNull Object model, Target<Drawable> target, @NonNull DataSource dataSource, boolean isFirstResource) {
+                        if (gallery != null && !gallery.getGalleryData().getCheckedExt())
+                            gallery.getGalleryData().setCheckedExt();
+                        new Handler(context.getMainLooper()).post(() -> {
+                            //noinspection DataFlowIssue
+                            while (imageDownloadQueue.containsKey(gallery) && !imageDownloadQueue.get(gallery).isEmpty()) {
+                                //noinspection DataFlowIssue
+                                imageDownloadQueue.get(gallery).remove(0).run();
+                            }
+                        });
+                        return false;
+                    }
+                })
+                .placeholder(logo)
+                .into(new ImageViewTarget<Drawable>(view) {
+                    @Override
+                    protected void setResource(@Nullable Drawable resource) {
+                        new Handler(context.getMainLooper()).post(() -> this.view.setImageDrawable(resource));
+                    }
+                });
+        });
+        if (newGallery) {
+            //noinspection DataFlowIssue
+            imageDownloadQueue.get(gallery).remove(0).run();
+        } else if (priority) {
+            //noinspection DataFlowIssue
+            imageDownloadQueue.get(gallery).remove(imageDownloadQueue.get(gallery).size() - 1).run();
+        } else if (gallery == null || gallery.getGalleryData().getCheckedExt()) {
+            //noinspection DataFlowIssue
+            while (!imageDownloadQueue.get(gallery).isEmpty())
+                //noinspection DataFlowIssue
+                imageDownloadQueue.get(gallery).remove(0).run();
+        }
     }
 
     private static Uri getUrlForGallery(Gallery gallery, int page, boolean shouldFull) {

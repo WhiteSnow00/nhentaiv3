@@ -42,7 +42,6 @@ import com.maxwai.nclientv3.settings.AuthRequest;
 import com.maxwai.nclientv3.settings.Favorites;
 import com.maxwai.nclientv3.settings.Global;
 import com.maxwai.nclientv3.settings.Login;
-import com.maxwai.nclientv3.utility.DebugTrace;
 import com.maxwai.nclientv3.utility.LogUtility;
 import com.maxwai.nclientv3.utility.Utility;
 
@@ -96,7 +95,6 @@ public class GalleryActivity extends BaseActivity {
             return;
         }
         if (gal != null) this.gallery = gal;
-        DebugTrace.log("GalleryActivity.onCreate", this, savedInstanceState, "galleryId=" + this.gallery.getId());
         if (gallery.getType() != GenericGallery.Type.LOCAL) {
             Queries.HistoryTable.addGallery(((Gallery) gallery).toSimpleGallery());
         }
@@ -269,21 +267,8 @@ public class GalleryActivity extends BaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        DebugTrace.log("GalleryActivity.onResume", this, null, "galleryId=" + gallery.getId());
         updateColumnCount(false);
         if (isLocal) supportInvalidateOptionsMenu();
-    }
-
-    @Override
-    protected void onPause() {
-        DebugTrace.log("GalleryActivity.onPause", this, null, "galleryId=" + gallery.getId());
-        super.onPause();
-    }
-
-    @Override
-    protected void onDestroy() {
-        DebugTrace.log("GalleryActivity.onDestroy", this, null, "galleryId=" + gallery.getId());
-        super.onDestroy();
     }
 
     @Override
